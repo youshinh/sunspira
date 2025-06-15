@@ -11,7 +11,7 @@ load_dotenv()
 # --- モデル、スキーマ、セキュリティ関数のインポート ---
 from .models import User, Agent, Conversation, Message
 from .schemas import UserCreate, UserRead, Token
-from .security import get_password_hash, verify_password, create_access_token
+from .security import get_password_hash, verify_password, create_access_token, get_current_user # get_current_user を追加
 
 
 # --- FastAPIアプリケーションの初期化 ---
@@ -91,3 +91,13 @@ async def login_for_access_token(
         data={"sub": user.email}
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/users/me", response_model=UserRead, tags=["Users"])
+async def read_users_me(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """
+    現在ログインしているユーザーの情報を取得します。
+    このエンドポイントは認証が必要です。
+    """
+    return current_user

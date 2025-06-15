@@ -103,3 +103,7 @@ openssl rand -hex 32
 
 7194a83d6354b747fb1d9ea6dee1126b29d91c30303864c8f99783f189f28c79
 
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ5b3VzaGluQGdtYWlsLmNvbSIsImV4cCI6MTc1MDAwMzMyOH0.NHTm0arq4lt_0-rP3IhG8OllsAbU56VdvC4Xp-cHuMw",
+  "token_type": "bearer"
+}
