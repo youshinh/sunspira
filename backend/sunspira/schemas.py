@@ -2,14 +2,11 @@ from pydantic import BaseModel, EmailStr
 from beanie import PydanticObjectId
 from datetime import datetime
 
-# --- User Schemas ---
-
-# ユーザー登録時にAPIが受け取るデータの形
+# --- User Schemas (既存のコード) ---
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
 
-# APIがユーザー情報を返す際のデータの形（パスワードは含めない）
 class UserRead(BaseModel):
     id: PydanticObjectId
     email: EmailStr
@@ -17,4 +14,9 @@ class UserRead(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attributes = True # ORMモデルからPydanticモデルへ変換できるようにする
+        from_attributes = True
+
+# --- ここから下を追記：Token Schema ---
+class Token(BaseModel):
+    access_token: str
+    token_type: str

@@ -97,3 +97,9 @@ pip install "passlib[bcrypt]"
 
 backend/sunspira/security.py
 
+pip install "python-jose[cryptography]"
+
+openssl rand -hex 32
+
+7194a83d6354b747fb1d9ea6dee1126b29d91c30303864c8f99783f189f28c79
+
