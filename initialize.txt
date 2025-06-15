@@ -38,3 +38,51 @@ gcloud artifacts repositories create sunspira-repo --repository-format=docker --
 
 # GitHubリポジトリの準備も完了
 
+
+create
+sunspira/
+├── backend/      # FastAPI, Celery, ADKなどバックエンドのコードをすべて格納
+└── frontend/     # Next.jsのフロントエンドのコードをすべて格納
+
+cd backend
+# 仮想環境を作成 (venvという名前のフォルダができます)
+python -m venv venv
+
+# 仮想環境を有効化 (Windowsの場合)
+.\venv\Scripts\activate
+
+pip install "fastapi[all]" "celery[redis]" "beanie" "motor" "python-dotenv" "google-cloud-aiplatform" "google-adk"
+
+pip freeze > requirements.txt
+
+
+backend/
+├── sunspira/              # メインのアプリケーションコードを入れるフォルダ
+│   ├── __init__.py        # このフォルダをPythonパッケージとして認識させるための空ファイル
+│   ├── main.py            # FastAPIアプリケーションのエントリーポイント
+│   ├── tasks.py           # Celeryの非同期タスクを定義するファイル
+│   ├── models.py          # データベースのスキーマ(モデル)を定義するファイル
+│   └── agents/            # ADKで作成するAIエージェントを格納するフォルダ
+│       ├── __init__.py
+│       └── personal_agent.py
+├── .gitignore             # Gitの追跡から除外するファイルを指定
+├── Dockerfile             # 本番環境用のコンテナを作成するための設計図
+└── venv/                  # (作成済みの仮想環境)
+
+# frontendフォルダに移動
+cd frontend
+
+# . は「現在のフォルダに作成する」という意味です
+npx create-next-app@latest .
+いくつか質問されますが、以下のように答えるのがおすすめです。
+
+Would you like to use TypeScript? Yes
+Would you like to use ESLint? Yes
+Would you like to use Tailwind CSS? Yes
+Would you like to usesrc/directory? No
+Would you like to use App Router? Yes
+turbopack? yes
+Would you like to customize the default import alias? No
+
+npm install zustand react-flow
+
