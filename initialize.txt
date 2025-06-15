@@ -12,11 +12,6 @@ gcloud iam service-accounts create celery-worker-sa --display-name="SUNSPIRA Cel
 # Next.jsフロントエンド用のサービスアカウント
 gcloud iam service-accounts create frontend-sa --display-name="SUNSPIRA Frontend SA"
 
-# "your-mongodb-connection-string" の部分を、
-# 実際に使用するMongoDB Atlasの接続文字列に置き換えてください。
-# 実行すると、文字列の入力を求められます。
-echo -n "your-mongodb-connection-string" | gcloud secrets create sunspira-mongo-connection-string --data-file=- --replication-policy="automatic"
-
 
 mongodb
 youshinh@gmail.com
@@ -25,7 +20,10 @@ FYnYAFz34YlNeSns
 sunspira_user
 aKM7KEDeYgv1n0jd
 
-接続文字列雛形
+# "your-mongodb-connection-string" の部分を、
+# 実際に使用するMongoDB Atlasの接続文字列に置き換えてください。
+# 実行すると、文字列の入力を求められます。
+# 接続文字列雛形
 mongodb+srv://<db_username>:<db_password>@cluster0.3q5szia.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
 
 実際の接続文字列
@@ -33,3 +31,10 @@ mongodb+srv://sunspira_user:aKM7KEDeYgv1n0jd@cluster0.3q5szia.mongodb.net/?retry
 
 # "mongodb+srv://..." の部分を、あなたがコピーしてパスワードを編集した文字列に置き換えます
 echo -n "mongodb+srv://sunspira_user:aKM7KEDeYgv1n0jd@cluster0.3q5szia.mongodb.net/?retryWrites=true&w=majority" | gcloud secrets create sunspira-mongo-connection-string --data-file=- --replication-policy="automatic"
+
+# "sunspira-repo" という名前のDockerリポジトリを作成します
+# リージョンは "us-central1" を例としていますが、お好きなリージョンに変更可能です
+gcloud artifacts repositories create sunspira-repo --repository-format=docker --location=us-central1 --description="Docker repository for SUNSPIRA project"
+
+# GitHubリポジトリの準備も完了
+
