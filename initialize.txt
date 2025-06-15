@@ -86,3 +86,14 @@ Would you like to customize the default import alias? No
 
 npm install zustand react-flow
 
+
+cd backend
+uvicorn sunspira.main:app --reload
+{"status":"ok","message":"Welcome to the SUNSPIRA API"}
+とブラウザで出たら成功
+
+ユーザー登録準備
+pip install "passlib[bcrypt]"
+
+backend/sunspira/security.py
+
