@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from dotenv import load_dotenv
 from typing import Annotated
+from .tasks import long_running_task
 
 load_dotenv()
 
@@ -101,3 +102,14 @@ async def read_users_me(
     このエンドポイントは認証が必要です。
     """
     return current_user
+
+@app.post("/test-async-task", tags=["Tests"])
+async def test_async(message: str = "Hello Celery"):
+    """
+    非同期のCeleryタスクを起動するためのテスト用エンドポイント。
+    このAPIはすぐにレスポンスを返します。
+    """
+    # .delay() を付けて呼び出すことで、タスクをバックグラウンドワーカーに依頼する
+    long_running_task.delay(message)
+    
+    return {"status": "ok", "message": "非同期タスクを受け付けました。処理はバックグラウンドで実行されます。"}
