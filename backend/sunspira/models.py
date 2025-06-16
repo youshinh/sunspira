@@ -1,6 +1,4 @@
-# backend/sunspira/models.py
-
-from beanie import Document, Link
+from beanie import Document, Link, PydanticObjectId # PydanticObjectId をインポート
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import datetime
@@ -18,9 +16,6 @@ class Agent(Document):
 
 # --- User Model ---
 class User(Document):
-    """ユーザー情報を格納するモデル"""
-    # Pydantic V2では、idフィールドは自動的に_idにマップされるので明示的な定義は不要
-    
     email: EmailStr
     hashed_password: str
     is_active: bool = True
@@ -29,11 +24,10 @@ class User(Document):
     updated_at: datetime = datetime.now()
 
     class Settings:
-        name = "users" # MongoDB上のコレクション名
+        name = "users"
 
 # --- Agent Models ---
 class LinxProfile(BaseModel):
-    """エージェントの個性を定義する「遺伝子」情報"""
     creativity_score: float = 0.5
     risk_aversion_score: float = 0.5
     verbosity_score: float = 0.5
@@ -41,32 +35,32 @@ class LinxProfile(BaseModel):
     mastered_skills: List[str] = []
 
 class LinxLineage(BaseModel):
-    """親エージェントIDを格納する「家系図」情報"""
     parent1_id: Optional[str] = None
     parent2_id: Optional[str] = None
 
 class Agent(Document):
-    """AIエージェントの定義を格納するモデル"""
     agent_id: str = f"agent-{uuid.uuid4()}"
     owner: Link[User]
-    agent_type: str = "PERSONAL" # PERSONAL, META, SANDBOX
+    agent_type: str = "PERSONAL"
     description: str
     system_prompt: str
     linx_profile: LinxProfile = LinxProfile()
     linx_lineage: Optional[LinxLineage] = None
-    status: str = "ACTIVE" # ACTIVE, IN_SANDBOX, RETIRED
+    status: str = "ACTIVE"
 
     class Settings:
         name = "agents"
 
 # --- Conversation Models ---
 class Sender(BaseModel):
-    sender_type: str # "USER" or "AGENT"
+    sender_type: str
     sender_id: str
 
 class Message(Document):
-    """各メッセージの詳細を格納するモデル"""
-    conversation: Link[Conversation]
+    # ↓↓↓↓ ここの行を書き換えます ↓↓↓↓
+    # conversation: Link[Conversation]  <- この行をコメントアウトまたは削除
+    conversation_id: PydanticObjectId   # <- この行を追加
+    
     sender: Sender
     content: str
     timestamp: datetime = datetime.now()
@@ -75,7 +69,6 @@ class Message(Document):
         name = "messages"
 
 class Conversation(Document):
-    """対話セッション全体を管理するモデル"""
     owner: Link[User]
     agent: Link[Agent]
     summary: Optional[str] = None
@@ -83,3 +76,9 @@ class Conversation(Document):
 
     class Settings:
         name = "conversations"
+
+# 全てのモデル定義が終わった後に、モデルの参照を再構築する
+User.model_rebuild()
+Agent.model_rebuild()
+Conversation.model_rebuild()
+Message.model_rebuild()
