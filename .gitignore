@@ -1,1 +1,15 @@
+# Virtual environment
+venv/
+
+# Python cache
+__pycache__/
+
+# Specific file
 initialize.txt
+
+# Environment variables
+.env
+backend/.env
+
+# Node modules
+frontend/node_modules/
