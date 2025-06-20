@@ -1,53 +1,77 @@
-from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi import FastAPI, HTTPException, status, Depends, WebSocket, WebSocketDisconnect
 from fastapi.security import OAuth2PasswordRequestForm
 from beanie import init_beanie, PydanticObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from dotenv import load_dotenv
 from typing import Annotated
-from contextlib import asynccontextmanager # lifespanのためにインポート
+from contextlib import asynccontextmanager
+import uuid
+import asyncio
+import redis.asyncio as aioredis # 新しいライブラリをaioredisという別名でインポート
 
-load_dotenv()
-
-# --- モデル、スキーマ、セキュリティ関数のインポート ---
+# --- 他のモジュールからインポート ---
 from .models import User, Agent, Conversation, Message
 from .schemas import UserCreate, UserRead, Token, ConversationRead, MessageCreate
 from .security import get_password_hash, verify_password, create_access_token, get_current_user
 from .tasks import process_agent_response_task
+from .websocket_manager import ConnectionManager
 
-# --- lifespanコンテキストマネージャ（新しい初期化方法） ---
+load_dotenv()
+
+# --- グローバルなインスタンス ---
+manager = ConnectionManager()
+
+# --- Redis Pub/Subリスナー（新しいライブラリの作法に修正） ---
+async def pubsub_listener():
+    redis_url = os.getenv("REDIS_URL")
+    redis = aioredis.from_url(redis_url, decode_responses=True)
+    async with redis.pubsub() as pubsub:
+        await pubsub.psubscribe("progress:*")
+        print("Redis Pub/Sub listener started using redis-py.")
+        while True:
+            try:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message:
+                    channel = message["channel"]
+                    task_id = channel.split(":", 1)[1]
+                    data = message["data"]
+                    await manager.broadcast_to_task(task_id, data)
+            except asyncio.TimeoutError:
+                # タイムアウトは正常な動作なので何もしない
+                await asyncio.sleep(0.01)
+            except Exception as e:
+                print(f"Redis listener error: {e}")
+
+# --- lifespanコンテキストマネージャ ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    アプリケーションの起動と終了時に実行される処理
-    """
     # 起動時の処理
     mongodb_connection_string = os.getenv("MONGO_CONNECTION_STRING_SECRET")
     if not mongodb_connection_string:
         raise ValueError("MongoDB connection string not found.")
-
+    
     client = AsyncIOMotorClient(mongodb_connection_string)
     database = client.get_database("sunspira_db")
-
-    await init_beanie(
-        database=database,
-        document_models=[
-            User,
-            Agent,
-            Conversation,
-            Message
-        ]
-    )
+    await init_beanie(database=database, document_models=[User, Agent, Conversation, Message])
     print("Database connection and Beanie initialization complete.")
+
+    listener_task = asyncio.create_task(pubsub_listener())
     
-    yield # ここでアプリケーションがリクエストの受け付けを開始
+    yield
     
     # 終了時の処理
-    print("Closing database connection.")
+    print("Shutting down...")
+    listener_task.cancel()
+    try:
+        await listener_task
+    except asyncio.CancelledError:
+        print("Listener task successfully cancelled.")
     client.close()
+    print("Shutdown complete.")
+
 
 # --- FastAPIアプリケーションの初期化 ---
-# lifespanをここで適用します
 app = FastAPI(
     title="SUNSPIRA Backend API",
     description="The core API for the SUNSPIRA computational life form.",
@@ -55,10 +79,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# @app.on_event("startup") と @app.on_event("shutdown") はもう不要なので削除しました
-
-
-# --- APIエンドポイントの定義 ---
+# ... (ここから下のAPIエンドポイント部分は一切変更ありません) ...
+@app.websocket("/ws/v1/tasks/{task_id}/subscribe")
+async def websocket_task_subscribe(websocket: WebSocket, task_id: str):
+    await manager.connect(websocket, task_id)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, task_id)
 
 @app.get("/", tags=["Health Check"])
 async def root():
@@ -68,10 +97,7 @@ async def root():
 async def create_user(user_in: UserCreate):
     existing_user = await User.find_one(User.email == user_in.email)
     if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="このメールアドレスは既に使用されています。",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="このメールアドレスは既に使用されています。")
     hashed_password = get_password_hash(user_in.password)
     new_user = User(email=user_in.email, hashed_password=hashed_password)
     await new_user.insert()
@@ -81,11 +107,7 @@ async def create_user(user_in: UserCreate):
 async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     user = await User.find_one(User.email == form_data.username)
     if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="メールアドレスまたはパスワードが正しくありません",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="メールアドレスまたはパスワードが正しくありません", headers={"WWW-Authenticate": "Bearer"})
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -97,22 +119,11 @@ async def read_users_me(current_user: Annotated[User, Depends(get_current_user)]
 async def create_conversation(current_user: Annotated[User, Depends(get_current_user)]):
     agent = await Agent.find_one({"owner.id": current_user.id})
     if not agent:
-        agent = Agent(
-            owner=current_user,
-            description="Default Personal Agent",
-            system_prompt="You are a helpful assistant."
-        )
+        agent = Agent(owner=current_user, description="Default Personal Agent", system_prompt="You are a helpful assistant.")
         await agent.insert()
-
     new_conversation = Conversation(owner=current_user, agent=agent)
     await new_conversation.insert()
-    
-    return ConversationRead(
-        id=new_conversation.id,
-        owner_id=new_conversation.owner.id,
-        agent_id=agent.agent_id,
-        created_at=new_conversation.created_at
-    )
+    return ConversationRead(id=new_conversation.id, owner_id=new_conversation.owner.id, agent_id=agent.agent_id, created_at=new_conversation.created_at)
 
 @app.post("/conversations/{conversation_id}/messages", status_code=status.HTTP_202_ACCEPTED, tags=["Conversations"])
 async def create_message_in_conversation(
@@ -120,6 +131,10 @@ async def create_message_in_conversation(
     message_in: MessageCreate,
     current_user: Annotated[User, Depends(get_current_user)]
 ):
+    """
+    特定の会話に新しいメッセージを投稿し、AIの応答タスクを非同期で開始します。
+    認証が必要です。
+    """
     conversation = await Conversation.find_one(
         Conversation.id == conversation_id,
         Conversation.owner.id == current_user.id,
@@ -127,18 +142,20 @@ async def create_message_in_conversation(
 
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found or access denied")
+    
+    # task_idを一度だけ生成して、変数に保存する
+    task_id = str(uuid.uuid4())
 
-    # ↓↓↓↓ ここのロジックを修正しました ↓↓↓↓
     user_message = Message(
-        conversation_id=conversation.id, # 新しい conversation_id フィールドにIDを直接セット
+        conversation_id=conversation.id,
         sender={"sender_type": "USER", "sender_id": str(current_user.id)},
         content=message_in.content
+        # task_idをDBに保存するロジックは、必要なら後で追加しましょう
     )
     await user_message.insert()
 
-    process_agent_response_task.delay(str(user_message.id))
+    # Celeryタスクには、保存したtask_idを渡す
+    process_agent_response_task.delay(str(user_message.id), task_id)
 
-    return {"status": "ok", "message": "Message received. Agent is thinking..."}
-@app.delete("/test-async-task", tags=["Tests"])
-async def test_async(message: str = "Hello Celery"):
-    return {"deprecated": "This endpoint is no longer in use."}
+    # フロントエンドにも、同じtask_idを返す
+    return {"status": "ok", "message": "Message received. Agent is thinking...", "task_id": task_id}
