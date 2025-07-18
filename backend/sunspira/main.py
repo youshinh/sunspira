@@ -8,7 +8,7 @@ from typing import Annotated
 from contextlib import asynccontextmanager
 import uuid
 import asyncio
-import redis.asyncio as aioredis # 新しいライブラリをaioredisという別名でインポート
+import redis.asyncio as redis # aioredisの代わりにredis.asyncioを直接使う
 
 # --- 他のモジュールからインポート ---
 from .models import User, Agent, Conversation, Message
@@ -25,8 +25,8 @@ manager = ConnectionManager()
 # --- Redis Pub/Subリスナー（新しいライブラリの作法に修正） ---
 async def pubsub_listener():
     redis_url = os.getenv("REDIS_URL")
-    redis = aioredis.from_url(redis_url, decode_responses=True)
-    async with redis.pubsub() as pubsub:
+    r = redis.from_url(redis_url, decode_responses=True)
+    async with r.pubsub() as pubsub:
         await pubsub.psubscribe("progress:*")
         print("Redis Pub/Sub listener started using redis-py.")
         while True:
@@ -46,28 +46,29 @@ async def pubsub_listener():
 # --- lifespanコンテキストマネージャ ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 起動時の処理
-    mongodb_connection_string = os.getenv("MONGO_CONNECTION_STRING_SECRET")
-    if not mongodb_connection_string:
-        raise ValueError("MongoDB connection string not found.")
+    # # 起動時の処理
+    # mongodb_connection_string = os.getenv("MONGO_CONNECTION_STRING_SECRET")
+    # if not mongodb_connection_string:
+    #     raise ValueError("MongoDB connection string not found.")
     
-    client = AsyncIOMotorClient(mongodb_connection_string)
-    database = client.get_database("sunspira_db")
-    await init_beanie(database=database, document_models=[User, Agent, Conversation, Message])
-    print("Database connection and Beanie initialization complete.")
+    # client = AsyncIOMotorClient(mongodb_connection_string)
+    # database = client.get_database("sunspira_db")
+    # await init_beanie(database=database, document_models=[User, Agent, Conversation, Message])
+    # print("Database connection and Beanie initialization complete.")
 
-    listener_task = asyncio.create_task(pubsub_listener())
+    # listener_task = asyncio.create_task(pubsub_listener())
     
+    print("Lifespan startup complete (DB/Redis connection skipped).")
     yield
     
-    # 終了時の処理
-    print("Shutting down...")
-    listener_task.cancel()
-    try:
-        await listener_task
-    except asyncio.CancelledError:
-        print("Listener task successfully cancelled.")
-    client.close()
+    # # 終了時の処理
+    # print("Shutting down...")
+    # listener_task.cancel()
+    # try:
+    #     await listener_task
+    # except asyncio.CancelledError:
+    #     print("Listener task successfully cancelled.")
+    # client.close()
     print("Shutdown complete.")
 
 
