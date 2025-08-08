@@ -9,3 +9,8 @@ venv/
 
 # Env files
 .env
+# Environment variables
+backend/.env
+
+# Log files
+backend/*.log
